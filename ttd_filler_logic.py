@@ -120,6 +120,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
     orders = orders[[
         "__TR",
         "State",
+        "Category",
         "Orders_Address"
     ]].drop_duplicates("__TR")
 
@@ -200,5 +201,6 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
 
 
