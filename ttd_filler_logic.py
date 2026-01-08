@@ -1,7 +1,6 @@
 import pandas as pd
 from openpyxl import load_workbook
 import re
-import os
 
 # ---------------- HELPERS ----------------
 
@@ -9,47 +8,75 @@ def clean_mobile(mobile):
     if pd.isna(mobile):
         return ""
     digits = re.sub(r"\D", "", str(mobile))
-    if digits.startswith("91") and len(digits) > 10:
+    if len(digits) > 10 and digits.startswith("91"):
         digits = digits[2:]
     return digits if len(digits) == 10 else ""
 
 def split_address(addr):
-    """
-    Remove last 3 parts (city, state, pincode)
-    Split remaining into 3 non-empty lines
-    """
     if pd.isna(addr) or not addr:
         return "", "", ""
 
     parts = [p.strip() for p in str(addr).split(",") if p.strip()]
 
-    # remove last 3 parts
+    # remove last 3 → city, state, pincode
     if len(parts) > 3:
         parts = parts[:-3]
 
-    if len(parts) == 0:
-        return "", "", ""
+    line1 = parts[0] if len(parts) > 0 else ""
+    line2 = parts[1] if len(parts) > 1 else ""
+    line3 = ", ".join(parts[2:]) if len(parts) > 2 else line2
 
-    if len(parts) == 1:
-        return parts[0], parts[0], parts[0]
+    return line1, line2, line3
 
-    if len(parts) == 2:
-        return parts[0], parts[1], parts[1]
 
-    return parts[0], parts[1], ", ".join(parts[2:])
+# ---------------- VOLUMETRIC ----------------
 
-def get_dimensions(qty):
+def load_volumetric_tables(path):
+    df = pd.read_excel(path, header=None)
+
+    def block(r1, r2, c1, c2):
+        b = df.iloc[r1:r2, c1:c2].copy()
+        b.columns = ["Quantity", "L", "B", "H", "Weight"]
+        b["Quantity"] = pd.to_numeric(b["Quantity"], errors="coerce")
+        b = b.dropna(subset=["Quantity"])
+        b["Quantity"] = b["Quantity"].astype(int)
+        return b.set_index("Quantity")
+
+    return {
+        "calendar": block(2, 22, 0, 5),
+        "ttc": block(2, 27, 6, 11),
+        "big_diary": block(28, 48, 0, 5),
+        "small_diary": block(28, 53, 6, 11),
+    }
+
+def get_dimensions(vol, category, qty):
     qty = int(qty)
-    if qty >= 5:
-        return 57, 44, 2
-    return 25, 18, 4
+    c = str(category).lower()
+
+    if "calendar" in c and "table" not in c:
+        table = vol["calendar"]
+    elif "table" in c:
+        table = vol["ttc"]
+    elif "big" in c:
+        table = vol["big_diary"]
+    elif "small" in c:
+        table = vol["small_diary"]
+    else:
+        return None, None, None
+
+    if qty in table.index:
+        r = table.loc[qty]
+    else:
+        r = table[table.index <= qty].iloc[-1]
+
+    return int(r["L"]), int(r["B"]), int(r["H"])
+
 
 # ---------------- MAIN LOGIC ----------------
 
-def generate_output(orders_path, postal_path):
-    output_path = "Matching_Output.xlsx"
+def generate_output(orders_path, postal_path, template_path, volumetric_path, output_path):
 
-    # Load Postal
+    # ---- POSTAL FILE ----
     postal = pd.read_excel(postal_path, header=3)
 
     tr_col = postal.columns[1]
@@ -72,89 +99,94 @@ def generate_output(orders_path, postal_path):
     postal["Receiver pincode"] = pd.to_numeric(postal[pin_col], errors="coerce").fillna(0).astype(int)
     postal["Receiver mobile"] = postal[mobile_col].apply(clean_mobile)
     postal["Quantity"] = pd.to_numeric(postal[qty_col], errors="coerce").fillna(1).astype(int)
-    postal["Physical weight in grams"] = (
-        pd.to_numeric(postal[weight_col], errors="coerce").fillna(0).astype(int)
-    )
+    postal["Physical weight in grams"] = pd.to_numeric(postal[weight_col], errors="coerce").fillna(0).astype(int)
     postal["Barcode"] = postal[barcode_col].astype(str).str.strip()
 
-    postal = postal[postal["Receiver pincode"].between(100000, 999999)]
+    postal = postal[postal["Receiver pincode"].between(100000, 999999)].copy()
 
-    # Load Orders (STATE ONLY)
+    # ---- ORDERS FILE ----
     orders = pd.read_excel(orders_path, sheet_name="Publications_Report")
     orders["__TR"] = orders["Booking No"].astype(str).str.strip()
-    orders = orders[["__TR", "State"]].drop_duplicates("__TR")
 
+    orders = orders[[
+        "__TR",
+        "State",
+        "Address"
+    ]].drop_duplicates("__TR")
+
+    # ---- MERGE ----
     merged = postal.merge(orders, on="__TR", how="left")
     merged["State"] = merged["State"].fillna("Tamil Nadu")
 
-    # Load Template
-    wb = load_workbook("TTD Template.xlsx")
+    # 🔴 ONLY NEW FIX (AS REQUESTED)
+    merged["Full Address"] = merged["Full Address"].fillna(merged["Address"])
+
+    # ---- LOAD TEMPLATE ----
+    wb = load_workbook(template_path)
     ws = wb.active
 
     headers = [c.value for c in ws[1]]
     defaults = [c.value for c in ws[2]]
 
-    # Clear rows
-    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+    for row in ws.iter_rows(min_row=2):
         for cell in row:
             cell.value = None
 
-    serial_no = 1
+    vol = load_volumetric_tables(volumetric_path)
 
-    for _, row in merged.iterrows():
-        r = 1 + serial_no
+    serial = 1
 
-        L, B, H = get_dimensions(row["Quantity"])
-        a1, a2, a3 = split_address(row["Full Address"])
+    for idx, row in merged.iterrows():
+        r = 2 + idx
+        L, B, H = get_dimensions(vol, row["Category"], row["Quantity"])
 
-        for i, h in enumerate(headers):
+        for i, header in enumerate(headers):
             cell = ws.cell(row=r, column=i + 1)
-            h_norm = "" if h is None else h.lower()
+            h = "" if header is None else header.lower()
 
-            if "serial" in h_norm:
-                cell.value = serial_no
-            elif "barcode" in h_norm:
+            if "serial" in h:
+                cell.value = serial
+            elif "barcode" in h:
                 cell.value = row["Barcode"]
-            elif "physical weight" in h_norm:
+            elif "physical weight" in h:
                 cell.value = row["Physical weight in grams"]
-            elif "receiver name" in h_norm:
-                cell.value = row["Receiver name"]
-            elif "receiver mobile" in h_norm:
-                cell.value = row["Receiver mobile"]
-            elif "receiver city" in h_norm:
+            elif "receiver city" in h:
                 cell.value = row["Receiver city"]
-            elif "receiver pincode" in h_norm:
+            elif "receiver pincode" in h:
                 cell.value = row["Receiver pincode"]
-            elif "receiver state" in h_norm:
-                cell.value = row["State"]
-            elif "add line 1" in h_norm:
-                cell.value = a1
-            elif "add line 2" in h_norm:
-                cell.value = a2
-            elif "add line 3" in h_norm:
-                cell.value = a3
-            elif "length" in h_norm:
+            elif "receiver name" in h:
+                cell.value = row["Receiver name"]
+            elif "receiver mobile" in h:
+                cell.value = row["Receiver mobile"]
+            elif "add line 1" in h:
+                cell.value = split_address(row["Full Address"])[0]
+            elif "add line 2" in h:
+                cell.value = split_address(row["Full Address"])[1]
+            elif "add line 3" in h:
+                cell.value = split_address(row["Full Address"])[2]
+            elif "length" in h:
                 cell.value = L
-            elif "breadth" in h_norm or "diameter" in h_norm:
+            elif "breadth" in h or "diameter" in h:
                 cell.value = B
-            elif "height" in h_norm:
+            elif "height" in h:
                 cell.value = H
+            elif "receiver state" in h:
+                cell.value = row["State"]
             else:
                 cell.value = defaults[i]
 
-            # Sender (fixed)
-            if "sender mobile" in h_norm:
+            if "sender mobile" in h:
                 cell.value = 1234567890
-            if "sender state" in h_norm:
+            if "sender state" in h:
                 cell.value = "Andhra Pradesh"
-            if "sender add line 1" in h_norm:
+            if "sender add line 1" in h:
                 cell.value = "SALES WING OF PUBLICATIONS"
-            if "sender add line 2" in h_norm:
+            if "sender add line 2" in h:
                 cell.value = "TTD PRESS COMPOUND"
-            if "sender add line 3" in h_norm:
+            if "sender add line 3" in h:
                 cell.value = "Tirupati-517507"
 
-        serial_no += 1
+        serial += 1
 
     wb.save(output_path)
-    return output_path, serial_no - 1
+    return serial - 1
