@@ -12,7 +12,7 @@ def clean_mobile(mobile):
         digits = digits[2:]
     return digits if len(digits) == 10 else ""
 
-def split_address(addr, max_len=49):
+def split_address(addr, max_len=35):
     if pd.isna(addr) or not addr:
         return "", "", ""
 
@@ -23,29 +23,38 @@ def split_address(addr, max_len=49):
     if len(parts) > 3:
         parts = parts[:-3]
 
-    clean_addr = ", ".join(parts)
-
     lines = ["", "", ""]
-    current_line = 0
+    line_idx = 0
 
-    for word in clean_addr.split(" "):
-        if current_line > 2:
+    for part in parts:
+        if line_idx > 2:
             break
 
-        if not lines[current_line]:
-            tentative = word
+        # If part itself is longer than max_len, word-wrap it
+        if len(part) > max_len:
+            words = part.split(" ")
         else:
-            tentative = lines[current_line] + " " + word
+            words = [part]
 
-        if len(tentative) <= max_len:
-            lines[current_line] = tentative
-        else:
-            current_line += 1
-            if current_line > 2:
+        for word in words:
+            if line_idx > 2:
                 break
-            lines[current_line] = word
+
+            if not lines[line_idx]:
+                tentative = word
+            else:
+                tentative = lines[line_idx] + ", " + word
+
+            if len(tentative) <= max_len:
+                lines[line_idx] = tentative
+            else:
+                line_idx += 1
+                if line_idx > 2:
+                    break
+                lines[line_idx] = word
 
     return lines[0], lines[1], lines[2]
+
 
 
 # ---------------- VOLUMETRIC ----------------
@@ -220,6 +229,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
 
 
 
