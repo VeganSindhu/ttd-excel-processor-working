@@ -12,21 +12,40 @@ def clean_mobile(mobile):
         digits = digits[2:]
     return digits if len(digits) == 10 else ""
 
-def split_address(addr):
+def split_address(addr, max_len=49):
     if pd.isna(addr) or not addr:
         return "", "", ""
 
+    # Split by comma and clean
     parts = [p.strip() for p in str(addr).split(",") if p.strip()]
 
-    # remove last 3 → city, state, pincode
+    # Remove last 3 parts: city, state, pincode
     if len(parts) > 3:
         parts = parts[:-3]
 
-    line1 = parts[0] if len(parts) > 0 else ""
-    line2 = parts[1] if len(parts) > 1 else ""
-    line3 = ", ".join(parts[2:]) if len(parts) > 2 else line2
+    clean_addr = ", ".join(parts)
 
-    return line1, line2, line3
+    lines = ["", "", ""]
+    current_line = 0
+
+    for word in clean_addr.split(" "):
+        if current_line > 2:
+            break
+
+        if not lines[current_line]:
+            tentative = word
+        else:
+            tentative = lines[current_line] + " " + word
+
+        if len(tentative) <= max_len:
+            lines[current_line] = tentative
+        else:
+            current_line += 1
+            if current_line > 2:
+                break
+            lines[current_line] = word
+
+    return lines[0], lines[1], lines[2]
 
 
 # ---------------- VOLUMETRIC ----------------
@@ -201,6 +220,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
 
 
 
