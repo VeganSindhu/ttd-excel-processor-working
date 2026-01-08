@@ -117,11 +117,11 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
         + orders["Shipping Address 2"].fillna("").astype(str).str.strip()
     )
 
-orders = orders[[
-    "__TR",
-    "State",
-    "Orders_Address"
-]].drop_duplicates("__TR")
+    orders = orders[[
+        "__TR",
+        "State",
+        "Orders_Address"
+    ]].drop_duplicates("__TR")
 
 
     # ---- MERGE ----
@@ -200,4 +200,5 @@ orders = orders[[
 
     wb.save(output_path)
     return serial - 1
+
 
