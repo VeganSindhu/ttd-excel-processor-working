@@ -108,18 +108,28 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
     orders = pd.read_excel(orders_path, sheet_name="Publications_Report")
     orders["__TR"] = orders["Booking No"].astype(str).str.strip()
 
-    orders = orders[[
-        "__TR",
-        "State",
-        "Address"
-    ]].drop_duplicates("__TR")
+    orders = orders.copy()
+    orders["__TR"] = orders["Booking No"].astype(str).str.strip()
+
+    orders["Orders_Address"] = (
+        orders["Shipping Address 1"].fillna("").astype(str).str.strip()
+        + ", "
+        + orders["Shipping Address 2"].fillna("").astype(str).str.strip()
+    )
+
+orders = orders[[
+    "__TR",
+    "State",
+    "Orders_Address"
+]].drop_duplicates("__TR")
+
 
     # ---- MERGE ----
     merged = postal.merge(orders, on="__TR", how="left")
     merged["State"] = merged["State"].fillna("Tamil Nadu")
 
     # 🔴 ONLY NEW FIX (AS REQUESTED)
-    merged["Full Address"] = merged["Full Address"].fillna(merged["Address"])
+    merged["Full Address"] = merged["Full Address"].fillna(merged["Orders_Address"])
 
     # ---- LOAD TEMPLATE ----
     wb = load_workbook(template_path)
@@ -190,3 +200,4 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
