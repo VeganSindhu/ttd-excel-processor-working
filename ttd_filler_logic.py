@@ -196,7 +196,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     for idx, row in merged.iterrows():
         r = 2 + idx
-        L, B, H = get_dimensions(vol, row["Category"], row["Quantity"])
+        L, B, H, phys_wt = get_dimensions(vol, row["Category"], row["Quantity"])
 
         for i, header in enumerate(headers):
             cell = ws.cell(row=r, column=i + 1)
@@ -207,7 +207,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
             elif "barcode" in h:
                 cell.value = row["Barcode"]
             elif "physical weight" in h:
-                cell.value = row["Physical weight in grams"]
+                 cell.value = phys_wt
             elif "receiver city" in h:
                 cell.value = row["Receiver city"]
             elif "receiver pincode" in h:
@@ -248,6 +248,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
 
 
 
