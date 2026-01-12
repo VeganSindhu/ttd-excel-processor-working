@@ -218,14 +218,14 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
                 cell.value = row["Receiver mobile"]
             elif "add line 1" in h:
                 cell.value = split_address(row["Full Address"])[0]
-           elif "add line 2" in h:
+            elif "add line 2" in h:
                 a2 = split_address(row["Full Address"])[1]
                 if not a2 or str(a2).strip() == "":
                     a2 = row["Receiver city"]
                 cell.value = a2
-
             elif "add line 3" in h:
                 cell.value = split_address(row["Full Address"])[2]
+
             elif "length" in h:
                 cell.value = L
             elif "breadth" in h or "diameter" in h:
@@ -252,6 +252,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
 
 
 
