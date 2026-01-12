@@ -94,13 +94,13 @@ def get_dimensions(vol, category, qty):
 
     # 🔹 6-Sheet Calendar logic
     if "6 sheet" in c:
-    table = vol["six_sheet"]
+        table = vol["six_sheet"]
 
-    # Use volumetric of max 10 per box, but DO NOT alter actual qty
-    vol_qty = qty if qty <= 10 else 10
+        # Use volumetric of max 10 per box, but DO NOT alter actual qty
+        vol_qty = qty if qty <= 10 else 10
 
-    r = table.loc[vol_qty]
-    return int(r["L"]), int(r["B"]), int(r["H"]), int(r["Weight"])
+        r = table.loc[vol_qty]
+        return int(r["L"]), int(r["B"]), int(r["H"]), int(r["Weight"])
 
 
     if "calendar" in c and "table" not in c:
@@ -256,6 +256,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
 
 
 
