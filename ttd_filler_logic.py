@@ -70,16 +70,34 @@ def load_volumetric_tables(path):
         b["Quantity"] = b["Quantity"].astype(int)
         return b.set_index("Quantity")
 
+    # 🔹 6-Sheet Calendar (HARDCODED AS PER YOUR TABLE)
+    six_sheet = pd.DataFrame({
+        "Quantity": range(1, 11),
+        "L": [57]*10,
+        "B": [44]*10,
+        "H": list(range(2, 12)),
+        "Weight": [990*i for i in range(1, 11)]
+    }).set_index("Quantity")
+
     return {
         "calendar": block(2, 22, 0, 5),
         "ttc": block(2, 27, 6, 11),
         "big_diary": block(28, 48, 0, 5),
         "small_diary": block(28, 53, 6, 11),
+        "six_sheet": six_sheet
     }
+
 
 def get_dimensions(vol, category, qty):
     qty = int(qty)
     c = str(category).lower()
+
+    # 🔹 6-Sheet Calendar logic
+    if "6 sheet" in c:
+        table = vol["six_sheet"]
+        qty = min(qty, 10)
+        r = table.loc[qty]
+        return int(r["L"]), int(r["B"]), int(r["H"]), int(r["Weight"])
 
     if "calendar" in c and "table" not in c:
         table = vol["calendar"]
@@ -90,14 +108,15 @@ def get_dimensions(vol, category, qty):
     elif "small" in c:
         table = vol["small_diary"]
     else:
-        return None, None, None
+        return None, None, None, None
 
     if qty in table.index:
         r = table.loc[qty]
     else:
         r = table[table.index <= qty].iloc[-1]
 
-    return int(r["L"]), int(r["B"]), int(r["H"])
+    return int(r["L"]), int(r["B"]), int(r["H"]), int(r["Weight"])
+
 
 
 # ---------------- MAIN LOGIC ----------------
@@ -229,6 +248,7 @@ def generate_output(orders_path, postal_path, template_path, volumetric_path, ou
 
     wb.save(output_path)
     return serial - 1
+
 
 
 
